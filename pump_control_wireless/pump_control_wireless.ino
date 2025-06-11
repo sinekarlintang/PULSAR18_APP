@@ -1,3 +1,4 @@
+// pump_control_wireless.ino
 #include "BluetoothSerial.h"
 #include <ArduinoJson.h>
 #include <SD.h>
@@ -5,7 +6,7 @@
 
 // Pin definitions for SD card
 #define SD_CS 5
-#define MOSI_PIN 23
+#define MOSI_PIN 25
 #define MISO_PIN 19
 #define CLK_PIN 18
 
@@ -37,17 +38,47 @@ float t = 0;
 // Available modes storage
 std::vector<String> availableModes;
 
+// Function declarations
+void pump_setup();
+void pump_loop();
+
 std::vector<String> getAvailableModesFromSD() {
   std::vector<String> modes;
-  // Load available modes from SD card
-  // For now return dummy data
-  modes.push_back("Otomatis");
-  modes.push_back("Manual");
-  modes.push_back("Test");
-  modes.push_back("Pediatric");
-  modes.push_back("Cardiac");
   
-  Serial.println("Reading available modes from SD Card (dummy implementation)");
+  File root = SD.open("/");
+  if (!root) {
+    Serial.println("Failed to open SD card directory");
+    return modes;
+  }
+  
+  while (true) {
+    File entry = root.openNextFile();
+    if (!entry) {
+      break; // No more files
+    }
+    if (!entry.isDirectory()) {
+      String fileName = entry.name();
+      if (fileName.endsWith(".txt")) {
+        // Extract mode name by removing the ".txt" extension
+        String modeName = fileName.substring(0, fileName.length() - 4);
+        modes.push_back(modeName);
+      }
+    }
+    entry.close();
+  }
+  root.close();
+  
+  if (modes.size() == 0) {
+    Serial.println("No modes available on SD card");
+    // Add default modes if none exist
+    modes.push_back("Otomatis");
+    modes.push_back("Manual");
+  }
+  
+  Serial.println("Available modes:");
+  for (const String& mode : modes) {
+    Serial.println("- " + mode);
+  }
   
   return modes;
 }
@@ -57,26 +88,32 @@ void setup() {
   SerialBT.begin("ESP32_Pump_Controller"); // Bluetooth device name
   Serial.println("ESP32 Bluetooth Ready. Waiting for connection...");
 
-  // Initialize available modes
+  SPI.begin(CLK_PIN, MISO_PIN, MOSI_PIN, SD_CS);
+  initializeSDCard();
   availableModes = getAvailableModesFromSD();
-  
   loadParametersFromSD(); 
+
+  pump_setup();
 }
 
 void loop() {
   handleBluetoothReceive();
-  
-  // Send actual data periodically
   if (millis() - lastSendTime >= SEND_INTERVAL) {
     sendActualParameters();
     lastSendTime = millis();
   }
-  
   updateActualValues();
-  
   controlPump();
-  
   delay(50);
+}
+
+void initializeSDCard() {
+  Serial.println("Initializing SD card...");
+  if (!SD.begin(SD_CS)) {
+    Serial.println("SD card initialization failed!");
+    while (1); // Halt if SD card fails
+  }
+  Serial.println("SD card initialized.");
 }
 
 void handleBluetoothReceive() {
@@ -131,12 +168,13 @@ void handleSetMode(DynamicJsonDocument &doc) {
   if (isModeAvailable(newMode)) {
     pumpParams.pumpMode = newMode;
     
-    loadParametersFromSD(newMode);
-    
-    sendModeConfirmation(newMode);
-    sendDesiredParameters();
-    
-    Serial.println("Mode changed to: " + newMode);
+    if (loadParametersFromSD(newMode)) {
+      sendModeConfirmation(newMode);
+      sendDesiredParameters();
+      Serial.println("Mode changed to: " + newMode);
+    } else {
+      sendErrorResponse("Failed to load mode parameters");
+    }
   } else {
     sendErrorResponse("Invalid mode or mode not available");
   }
@@ -221,10 +259,13 @@ void handleSetParameters(DynamicJsonDocument &doc) {
   }
   
   if (parametersChanged) {
-    saveParametersToSD();
-    sendParametersConfirmation();
-    sendDesiredParameters(); // Send updated parameters back
-    Serial.println("Parameters updated and saved");
+    if (saveParametersToSD()) {
+      sendParametersConfirmation();
+      sendDesiredParameters(); // Send updated parameters back
+      Serial.println("Parameters updated and saved");
+    } else {
+      sendErrorResponse("Failed to save parameters to SD card");
+    }
   } else {
     sendErrorResponse("No valid parameters provided or values out of range");
   }
@@ -272,8 +313,12 @@ void handleAddMode(DynamicJsonDocument &doc) {
     return;
   }
   
-  // Add mode to SD card and memory
-  if (addModeToSD(modeName)) {
+  // Create a copy of current parameters with new mode name
+  PumpParameters newMode = pumpParams;
+  newMode.pumpMode = modeName;
+  
+  // Add mode to SD card
+  if (addModeToSD(newMode)) {
     // Add to available modes list
     availableModes.push_back(modeName);
     
@@ -463,7 +508,7 @@ void sendErrorResponse(String errorMessage) {
 
 void controlPump() {
   if (pumpParams.startPump == 1) {
-    // Pump is active - implement pump control
+    pump_loop();  ///pump is started
     
   } else {
     // Pump is stopped
@@ -493,92 +538,117 @@ void updateActualValues() {
 
 //////////////////////////////////////// SD Card Integration Functions /////////////////////////////////////////
 
+// Load default parameters (overloaded function)
 void loadParametersFromSD() {
-  // Load default parameters
   Serial.println("Loading default parameters from SD Card");
-}
-
-void loadParametersFromSD(String mode) {
-  // Load parameters based on mode from SD Card
-  Serial.println("Loading parameters for mode: " + mode);
-   
-  // Dummy implementation
-  if (mode == "Hipertension") {
-    pumpParams.heartRate = 80;
-    pumpParams.systolicPressure = 120;
-    pumpParams.diastolicPressure = 80;
-    pumpParams.systolicPeriod = 60;
-    pumpParams.diastolicPeriod = 40;
-    pumpParams.notchPressure = 75;
-    pumpParams.systolicPeakTime = 100;
-    pumpParams.diastolicPeakTime = 300;
-    pumpParams.basePressure = 60;
-  } else if (mode == "Normal") {
-    pumpParams.heartRate = 70;
-    pumpParams.systolicPressure = 110;
-    pumpParams.diastolicPressure = 70;
-    pumpParams.systolicPeriod = 55;
-    pumpParams.diastolicPeriod = 45;
-    pumpParams.notchPressure = 55;
-    pumpParams.systolicPeakTime = 120;
-    pumpParams.diastolicPeakTime = 350;
-    pumpParams.basePressure = 40;
-  } else if (mode == "Test") {
-    pumpParams.heartRate = 60;
-    pumpParams.systolicPressure = 100;
-    pumpParams.diastolicPressure = 80;
-    pumpParams.systolicPeriod = 50;
-    pumpParams.diastolicPeriod = 50;
-    pumpParams.notchPressure = 75;
-    pumpParams.systolicPeakTime = 150;
-    pumpParams.diastolicPeakTime = 400;
-    pumpParams.basePressure = 60;
-  } else if (mode == "Pediatric") {
-    pumpParams.heartRate = 120;
-    pumpParams.systolicPressure = 95;
-    pumpParams.diastolicPressure = 80;
-    pumpParams.systolicPeriod = 65;
-    pumpParams.diastolicPeriod = 35;
-    pumpParams.notchPressure = 70;
-    pumpParams.systolicPeakTime = 80;
-    pumpParams.diastolicPeakTime = 250;
-    pumpParams.basePressure = 60;
-  } else if (mode == "Cardiac") {
-    pumpParams.heartRate = 65;
-    pumpParams.systolicPressure = 140;
-    pumpParams.diastolicPressure = 90;
-    pumpParams.systolicPeriod = 70;
-    pumpParams.diastolicPeriod = 30;
-    pumpParams.notchPressure = 70;
-    pumpParams.systolicPeakTime = 90;
-    pumpParams.diastolicPeakTime = 280;
-    pumpParams.basePressure = 60;
+  if (!loadParametersFromSD("Otomatis")) {
+    Serial.println("Failed to load default parameters, using hardcoded values");
+    // Keep current default values in pumpParams
   }
 }
 
-void saveParametersToSD() {
-  // Save parameters to SD Card
-  Serial.println("Saving parameters to SD Card");
-  // TODO: Implement actual SD Card saving
-
+// Load parameters for specific mode
+bool loadParametersFromSD(String modeName) {
+  File file = SD.open("/" + modeName + ".txt", FILE_READ);
+  if (!file) {
+    Serial.println("Failed to open file: " + modeName + ".txt");
+    return false;
+  }
+  
+  // Read parameters line by line
+  pumpParams.pumpMode = modeName;
+  pumpParams.heartRate = file.readStringUntil('\n').toInt();
+  pumpParams.basePressure = file.readStringUntil('\n').toInt();
+  pumpParams.systolicPressure = file.readStringUntil('\n').toInt();
+  pumpParams.diastolicPressure = file.readStringUntil('\n').toInt();
+  pumpParams.systolicPeriod = file.readStringUntil('\n').toInt();
+  pumpParams.diastolicPeriod = file.readStringUntil('\n').toInt();
+  pumpParams.notchPressure = file.readStringUntil('\n').toInt();
+  pumpParams.systolicPeakTime = file.readStringUntil('\n').toInt();
+  pumpParams.diastolicPeakTime = file.readStringUntil('\n').toInt();
+  
+  file.close();
+  
+  Serial.println("Parameters loaded for mode: " + modeName);
+  return true;
 }
 
-bool addModeToSD(String modeName) {
-  // Add new mode to SD Card
-  Serial.println("Adding mode to SD Card: " + modeName);
-
-  return true; // Return true for dummy implementation
+// Save current parameters to SD card
+bool saveParametersToSD() {
+  File file = SD.open("/" + pumpParams.pumpMode + ".txt", FILE_WRITE);
+  if (!file) {
+    Serial.println("Failed to open file for writing: " + pumpParams.pumpMode + ".txt");
+    return false;
+  }
+  
+  // Write parameters line by line
+  file.println(pumpParams.heartRate);
+  file.println(pumpParams.basePressure);
+  file.println(pumpParams.systolicPressure);
+  file.println(pumpParams.diastolicPressure);
+  file.println(pumpParams.systolicPeriod);
+  file.println(pumpParams.diastolicPeriod);
+  file.println(pumpParams.notchPressure);
+  file.println(pumpParams.systolicPeakTime);
+  file.println(pumpParams.diastolicPeakTime);
+  
+  file.close();
+  
+  Serial.println("Parameters saved for mode: " + pumpParams.pumpMode);
+  return true;
 }
 
+// Add new mode to SD card
+bool addModeToSD(PumpParameters mode) {
+  // Check if mode already exists
+  if (SD.exists("/" + mode.pumpMode + ".txt")) {
+    Serial.println("Mode already exists: " + mode.pumpMode);
+    return false; // Mode already exists
+  }
+  
+  File file = SD.open("/" + mode.pumpMode + ".txt", FILE_WRITE);
+  if (!file) {
+    Serial.println("Failed to create file: " + mode.pumpMode + ".txt");
+    return false;
+  }
+  
+  // Write parameters line by line
+  file.println(mode.heartRate);
+  file.println(mode.basePressure);
+  file.println(mode.systolicPressure);
+  file.println(mode.diastolicPressure);
+  file.println(mode.systolicPeriod);
+  file.println(mode.diastolicPeriod);
+  file.println(mode.notchPressure);
+  file.println(mode.systolicPeakTime);
+  file.println(mode.diastolicPeakTime);
+  
+  file.close();
+  
+  Serial.println("New mode added: " + mode.pumpMode);
+  return true;
+}
+
+// Delete mode from SD card
 bool deleteModeFromSD(String modeName) {
-  // Delete mode from SD Card
-  Serial.println("Deleting mode from SD Card: " + modeName);
-
-  return true; // Return true for dummy implementation
+  String fileName = "/" + modeName + ".txt";
+  
+  if (SD.exists(fileName)) {
+    bool result = SD.remove(fileName);
+    if (result) {
+      Serial.println("Mode deleted: " + modeName);
+    } else {
+      Serial.println("Failed to delete mode: " + modeName);
+    }
+    return result;
+  } else {
+    Serial.println("Mode file does not exist: " + modeName);
+    return false;
+  }
 }
 
+// Check if mode is available
 bool isModeAvailable(String mode) {
-  // Check if mode is available
   for (const String& availableMode : availableModes) {
     if (availableMode == mode) {
       return true;

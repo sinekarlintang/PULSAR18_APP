@@ -887,8 +887,8 @@ class PressureWaveformPainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
-  double _calculateSystolicPressure(double progress, double sysPeak) {
-    final tPeak   = sysPeak;
+  double _calculateSystolicPressure(double progress, double sysPeak) {    //sysPeak : systolicPeriod yang uda diubah dari percent ke ms
+    final tPeak   = sysPeak;                                            
 
     if (progress <= tPeak) {
       // Naik: baseline → systolicPressure  (cos setengah gelombang)
