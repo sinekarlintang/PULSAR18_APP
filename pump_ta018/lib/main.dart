@@ -15,14 +15,19 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => BluetoothService(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (context) => BluetoothService(),
+        ),
+      ],
       child: MaterialApp(
         title: 'Pump Controller',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primarySwatch: Colors.blue,
           fontFamily: 'Inter',
+          useMaterial3: true, // Added for better Material Design support
         ),
         initialRoute: '/',
         routes: {

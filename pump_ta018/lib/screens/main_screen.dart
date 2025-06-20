@@ -21,7 +21,7 @@ class _MainScreenState extends State<MainScreen> {
   // Data untuk grafik pressure
   List<FlSpot> _pressureData = [];
   double _timeCounter = 0;
-  static const int maxDataPoints = 100; // Maksimum titik data yang ditampilkan
+  static const int maxDataPoints =60; // Maksimum titik data yang ditampilkan
 
   @override
   void initState() {
@@ -61,18 +61,14 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _updatePressureData(double pressure) {
+    if (!mounted) return;
+
     setState(() {
       _pressureData.add(FlSpot(_timeCounter, pressure));
-      _timeCounter += 0.1; // Increment waktu (misalnya setiap 100ms)
-      
-      // Hapus data lama jika melebihi batas maksimum
+      _timeCounter += 0.1;
       if (_pressureData.length > maxDataPoints) {
-        _pressureData.removeAt(0);
-        // Sesuaikan ulang x-axis agar tetap berurutan
-        for (int i = 0; i < _pressureData.length; i++) {
-          _pressureData[i] = FlSpot(i * 0.1, _pressureData[i].y);
-        }
-        _timeCounter = _pressureData.length * 0.1;
+        _pressureData.clear();
+        _timeCounter = 0.0; // reset waktu agar grafik mulai dari nol lagi (opsional)
       }
     });
   }
@@ -189,6 +185,14 @@ class _MainScreenState extends State<MainScreen> {
       }
     }
 
+    // Calculate fixed x-axis range based on maxDataPoints
+    final double maxX = maxDataPoints * 0.1; // Each data point is 0.1 seconds
+    final double minX = 0.0;
+
+    // Calculate y-axis range based on parameters
+    final double maxY = parameters.systolicPressure + 20;
+    final double minY = parameters.basePressure - 20;
+
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey),
@@ -301,10 +305,10 @@ class _MainScreenState extends State<MainScreen> {
                         show: true,
                         border: Border.all(color: Colors.grey.withOpacity(0.3)),
                       ),
-                      minX: _pressureData.isNotEmpty ? _pressureData.first.x : 0,
-                      maxX: _pressureData.isNotEmpty ? _pressureData.last.x : 10,
-                      minY: 0,
-                      maxY: 200, // Sesuaikan dengan range pressure yang diharapkan
+                      minX: minX,
+                      maxX: maxX,
+                      minY: minY < 0 ? 0 : minY, // Ensure minY is not negative
+                      maxY: maxY,
                       lineBarsData: [
                         LineChartBarData(
                           spots: _pressureData,
@@ -343,7 +347,6 @@ class _MainScreenState extends State<MainScreen> {
       ),
     );
   }
-
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
