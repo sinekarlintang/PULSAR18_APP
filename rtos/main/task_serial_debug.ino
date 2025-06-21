@@ -10,6 +10,7 @@ void TaskSerialDebug(void *pv) {
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
+
 void handleSerialInput() {
   while (Serial.available()) {
     char c = Serial.read();
@@ -48,8 +49,35 @@ void processSerialCommand(String command) {
   
   bool parameterSet = false;
   
+  // Start/Stop Pump
+  if (parameter == "START_PUMP") {
+    if (value == 0 || value == 1) {
+      pumpParams.startPump = (int)value;
+      
+      // Reset control system when starting/stopping
+      if (pumpParams.startPump == 1) {
+        integral_outer = 0;
+        integral_inner = 0;
+        cycleStartTime = millis();
+        Serial.println("Pump STARTED - Control system reset");
+      } else {
+        resetControlSystem();
+        setpointPressure = 0;
+        ledcWrite(PUMP_PWM_PIN, 0);
+        currentPWM = 0;
+        integral_outer = 0;
+        integral_inner = 0;
+        Serial.println("Pump STOPPED");
+      }
+      
+      Serial.println("Pump start/stop set to: " + String(pumpParams.startPump));
+      parameterSet = true;
+    } else {
+      Serial.println("Invalid START_PUMP value (must be 0 or 1)");
+    }
+  }
   // Outer PID parameters
-  if (parameter == "KP_OUTER" || parameter == "KPO") {
+  else if (parameter == "KP_OUTER" || parameter == "KPO") {
     if (value >= 0 && value <= 50) {
       Kp_outer = value;
       parameterSet = true;
@@ -133,6 +161,9 @@ void printPIDHelp() {
   Serial.println("  STATUS or S      - Show current PID values");
   Serial.println("");
   Serial.println("Set Parameters (format: PARAMETER=VALUE):");
+  Serial.println("Pump Control:");
+  Serial.println("  START_PUMP=value - Set pump start/stop (0 or 1)");
+  Serial.println("");
   Serial.println("Outer PID (Pressure Control):");
   Serial.println("  KP_OUTER=value   - Set Kp_outer (0-50)");
   Serial.println("  KI_OUTER=value   - Set Ki_outer (0-50)");
@@ -146,6 +177,7 @@ void printPIDHelp() {
   Serial.println("");
   Serial.println("Short forms: KPO, KIO, KDO, NO, KPI, KII, KDI");
   Serial.println("Examples:");
+  Serial.println("  START_PUMP=1");
   Serial.println("  KP_OUTER=5.5");
   Serial.println("  KPO=7.2");
   Serial.println("  STATUS");
@@ -153,6 +185,9 @@ void printPIDHelp() {
 
 void printPIDStatus() {
   Serial.println("=== Current PID Parameters ===");
+  Serial.println("Pump Status:");
+  Serial.println("  Start Pump: " + String(pumpParams.startPump));
+  Serial.println("");
   Serial.println("Outer PID (Pressure):");
   Serial.println("  Kp_outer: " + String(Kp_outer, 3));
   Serial.println("  Ki_outer: " + String(Ki_outer, 3));

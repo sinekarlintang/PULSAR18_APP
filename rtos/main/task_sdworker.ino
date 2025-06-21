@@ -1,4 +1,3 @@
-// File: task_sdworker.ino
 #include "tasks.h"
 #include <SD.h>
 

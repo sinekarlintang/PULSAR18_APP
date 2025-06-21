@@ -15,10 +15,8 @@ void updateFlowRate();
 
 void TaskSensor(void *pv) {
   for (;;) {
-    float pressure = readPressureFromADS();
-    // pumpParams.pressureActual = (int)generateBloodPressureWaveform();
     updateFlowRate();
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(1));
   }
 }
 float readPressureFromADS() {

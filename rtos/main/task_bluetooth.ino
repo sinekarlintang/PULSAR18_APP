@@ -8,6 +8,7 @@ extern bool loadParametersFromSD(String mode);
 extern bool addModeToSD(PumpParameters mode);
 extern bool deleteModeFromSD(String mode);
 extern bool isModeAvailable(String mode);
+extern void resetControlSystem();
 
 void sendErrorResponse(String msg);
 void sendDesiredParameters();
@@ -198,18 +199,24 @@ void handleSetStartStop(DynamicJsonDocument &doc) {
       pumpParams.startPump = newStartPump;
       
       // Reset control system when starting/stopping
-      if (newStartPump == 1) {
+      if (pumpParams.startPump == 1) {
         integral_outer = 0;
         integral_inner = 0;
         cycleStartTime = millis();
         Serial.println("Pump STARTED - Control system reset");
       } else {
+        resetControlSystem();
+        setpointPressure = 0;
+        ledcWrite(PUMP_PWM_PIN, 0);
+        currentPWM = 0;
+        integral_outer = 0;
+        integral_inner = 0;
         Serial.println("Pump STOPPED");
       }
       
       sendStartStopConfirmation(newStartPump);
       
-      Serial.println("Pump start/stop changed to: " + String(newStartPump));
+      Serial.println("Pump start/stop changed to: " + String(pumpParams.startPump));
     } else {
       sendErrorResponse("Invalid startPump value (must be 0 or 1)");
     }

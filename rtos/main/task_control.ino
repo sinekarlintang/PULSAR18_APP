@@ -14,8 +14,12 @@ void TaskControl(void *pv) {
     if (pumpParams.startPump) {
       unsigned long now = millis();
       if (now - lastSampleTime >= sampleInterval) {
-        setpointPressure = generateBloodPressureWaveform();
-        controlPump();
+        float bpm = pumpParams.heartRate;
+        cycleTime = 60.0 / bpm;
+        systolicDuration = pumpParams.systolicPeriod / 100.0 * cycleTime;
+        diastolicDuration = pumpParams.diastolicPeriod / 100.0 * cycleTime;
+        sysPeak = pumpParams.systolicPeakTime / 1000.0;
+        pump_loop();
         lastSampleTime = now;
       }
     }
@@ -24,6 +28,15 @@ void TaskControl(void *pv) {
 }
 
 void pump_loop() {  
+    if (pumpParams.startPump != 1) {
+    // Stop pump immediately if not started
+    ledcWrite(PUMP_PWM_PIN, 0);
+    currentPWM = 0;
+    // Reset integrators
+    integral_outer = 0;
+    integral_inner = 0;
+    return;
+  }
   unsigned long currentTime = millis();
   setpointPressure = generateBloodPressureWaveform();
 
@@ -38,7 +51,7 @@ void pump_loop() {
     x += k * (currentPressure - x); // Update estimate
     p *= (1 - k); // Update error covariance
 
-    // Update actual pressure for monitoring (convert kPa to mmHg)
+    // Update actual pressure for monitoring 
     pumpParams.pressureActual = (int)(x);
 
     // Dummy
@@ -83,16 +96,6 @@ void pump_loop() {
 
     lastError_outer = error_outer;
     lastSampleTime = currentTime;
-
-    // Output for monitoring (tab-separated for Serial Plotter)
-    // Serial.print(setpointPressure, 2);
-    // Serial.print('\t');
-    // Serial.print(x, 2); // Filtered pressure
-    // Serial.print('\t');
-    // Serial.print(setpointPWM);
-    // Serial.print('\t');
-    // Serial.print(currentPWM);
-    // Serial.println();
   }
 
   // Inner PID control loop (PWM/Speed)
@@ -133,21 +136,33 @@ void pump_loop() {
 
     lastError_inner = error_inner;
     lastInnerSampleTime = currentTime;
+    
+          // Output for monitoring (tab-separated for Serial Plotter)
+    Serial.print(setpointPressure, 2);
+    Serial.print(',');
+    Serial.print(x, 2); // Filtered pressure
+    Serial.print(',');
+    Serial.print(setpointPWM);
+    Serial.print(',');
+    Serial.print(currentPWM);
+    Serial.println();
   }
 }
 
 void controlPump() {
   // pump_loop();  
-  if (pumpParams.startPump == 1) {
-    pump_loop();  // pump is started
-  } else {
+  if (pumpParams.startPump == 0) {
     resetControlSystem();
+    setpointPressure = 0;
     ledcWrite(PUMP_PWM_PIN, 0);
     currentPWM = 0;
     integral_outer = 0;
     integral_inner = 0;
     cycleStartTime = millis();
+  } else {
+    pump_loop();
   }
+
 }
 
 void resetControlSystem() {

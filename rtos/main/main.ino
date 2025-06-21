@@ -20,15 +20,25 @@ void setup() {
   sdMutex = xSemaphoreCreateMutex();
 
   // Task init
-  xTaskCreatePinnedToCore(TaskBluetooth, "BT", 4096, NULL, 2, NULL, 0);
-  xTaskCreatePinnedToCore(TaskSerialDebug, "Serial", 4096, NULL, 1, NULL, 0);
-  xTaskCreatePinnedToCore(TaskSensor, "Sensor", 4096, NULL, 2, NULL, 1);
-  xTaskCreatePinnedToCore(TaskWaveform, "Waveform", 4096, NULL, 2, NULL, 1);
-  xTaskCreatePinnedToCore(TaskControl, "Control", 4096, NULL, 3, NULL, 1);
-  xTaskCreatePinnedToCore(TaskSDWorker, "SDWorker", 4096, NULL, 1, NULL, 0);
-  xTaskCreatePinnedToCore(TaskSendActual, "SendActual", 4096, NULL, 1, NULL, 0);
+  // kalau ingin matikan bluetooth dan sd card, hanya jalankan kontrol, comment ini
+  xTaskCreatePinnedToCore(TaskSDWorker, "SDWorker", 4096, NULL, 1, NULL, 0);      // Sd card works
+  xTaskCreatePinnedToCore(TaskSendActual, "SendActual", 4096, NULL, 1, NULL, 0);  // ngirim data sensor ke app terus terusan
+  xTaskCreatePinnedToCore(TaskBluetooth, "BT", 4096, NULL, 2, NULL, 0);           // bluetooth handling
+
+  xTaskCreatePinnedToCore(TaskSerialDebug, "Serial", 4096, NULL, 1, NULL, 0);     // ini klo mau ganti kp ki kd / start stop lewat serial
+  xTaskCreatePinnedToCore(TaskSensor, "Sensor", 4096, NULL, 2, NULL, 0);          // task ini untuk baca flowrate saja
+
+  xTaskCreatePinnedToCore(TaskControl, "Control", 4096, NULL, 3, NULL, 1);        // baca pressure sensor and control
+
+
+  // task waveform gajadi dipakai (uda digabung ke task control) tapi file 'task_waveform.ino' jangan dihapus!!! malas ngedit lagi.  
+  // al, kata gue lu lanjut variable kp ki kd langsung di file integrasi ini kalo ga gue nangis integrasiinnya lagi.
+  // edit di task_control.ino, pake aja pumpParams.heartRate (kalo mau varying berdasarkan BPM) atau variable lain di struct itu,
+  // pastiin variabel yang diganti uda ditulis di global            -sekar
+
+  // to do: varying pid constants, open loop control
 }
 
 void loop() {
-  vTaskDelete(NULL); // Not used in FreeRTOS
+  vTaskDelete(NULL); 
 }

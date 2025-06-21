@@ -29,7 +29,7 @@ volatile unsigned long lastPulseTime = 0;
 
 // PID Outer Loop (Pressure)
 float Kp_outer = 10;
-float Ki_outer = 10;
+float Ki_outer = 5;
 float Kd_outer = 1;
 float N_outer = 100;
 float setpointPressure = 0;
@@ -61,11 +61,11 @@ float sysPeak = 0;
 float x = 0;
 float p = 1.0;
 float r = 1;
-float q = 0.002;
+float q = 0.0001;
 
 // Sampling Timing
-const unsigned long sampleInterval = 10;
-const unsigned long innerSampleInterval = 1;
+const unsigned long sampleInterval = 2;
+const unsigned long innerSampleInterval = 0.5;
 unsigned long lastSampleTime = 0;
 unsigned long lastInnerSampleTime = 0;
 

@@ -13,7 +13,7 @@ void TaskWaveform(void *pv) {
     systolicDuration = pumpParams.systolicPeriod / 100.0 * cycleTime;
     diastolicDuration = pumpParams.diastolicPeriod / 100.0 * cycleTime;
     sysPeak = pumpParams.systolicPeakTime / 1000.0;
-    vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(pdMS_TO_TICKS(1));
   }
 }
 

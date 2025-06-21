@@ -35,13 +35,13 @@ const float SENSOR_VMAX = 4.05;
 
 // --- Pump Parameters Structure ---
 struct PumpParameters {
-  int heartRate = 80;
+  int heartRate = 60;
   int systolicPressure = 120;
-  int diastolicPressure = 80;
-  int systolicPeriod = 60;
-  int diastolicPeriod = 40;
-  int notchPressure = 60;
-  int systolicPeakTime = 600;
+  int diastolicPressure = 110;
+  int systolicPeriod = 50;
+  int diastolicPeriod = 50;
+  int notchPressure = 108;
+  int systolicPeakTime = 300;
   int diastolicPeakTime = 300;
   int flowRate = 80;
   int pressureActual = 80;
