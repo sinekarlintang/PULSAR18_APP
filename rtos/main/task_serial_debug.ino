@@ -28,56 +28,26 @@ void handleSerialInput() {
 
 void processSerialCommand(String command) {
   command.trim();
-  command.toUpperCase();
+  command.toLowerCase(); // Changed to lowercase
   
-  // Parse command format: PARAMETER=VALUE
-  int equalIndex = command.indexOf('=');
-  if (equalIndex == -1) {
-    if (command == "HELP" || command == "H") {
-      printPIDHelp();
-    } else if (command == "STATUS" || command == "S") {
-      printPIDStatus();
-    } else {
-      Serial.println("Invalid command. Type HELP for available commands.");
-    }
+  // Check for help and status commands first
+  if (command == "help" || command == "h") {
+    printPIDHelp();
+    return;
+  } else if (command == "status" || command == "s") {
+    printPIDStatus();
     return;
   }
   
-  String parameter = command.substring(0, equalIndex);
-  String valueStr = command.substring(equalIndex + 1);
-  float value = valueStr.toFloat();
-  
+  // Parse direct parameter commands (e.g., kp6, kpi7, ki5, etc.)
   bool parameterSet = false;
+  float value = 0;
   
-  // Start/Stop Pump
-  if (parameter == "START_PUMP") {
-    if (value == 0 || value == 1) {
-      pumpParams.startPump = (int)value;
-      
-      // Reset control system when starting/stopping
-      if (pumpParams.startPump == 1) {
-        integral_outer = 0;
-        integral_inner = 0;
-        cycleStartTime = millis();
-        Serial.println("Pump STARTED - Control system reset");
-      } else {
-        resetControlSystem();
-        setpointPressure = 0;
-        ledcWrite(PUMP_PWM_PIN, 0);
-        currentPWM = 0;
-        integral_outer = 0;
-        integral_inner = 0;
-        Serial.println("Pump STOPPED");
-      }
-      
-      Serial.println("Pump start/stop set to: " + String(pumpParams.startPump));
-      parameterSet = true;
-    } else {
-      Serial.println("Invalid START_PUMP value (must be 0 or 1)");
-    }
-  }
-  // Outer PID parameters
-  else if (parameter == "KP_OUTER" || parameter == "KPO") {
+  // Parse parameter commands: kp6, kpi7, ki5, kii8, kd3, kdi4, n100
+  if (command.startsWith("kp") && command.length() > 2 && !command.startsWith("kpi")) {
+    // Outer PID Kp: kp6 means set Kp_outer = 6
+    String valueStr = command.substring(2);
+    value = valueStr.toFloat();
     if (value >= 0 && value <= 50) {
       Kp_outer = value;
       parameterSet = true;
@@ -86,35 +56,10 @@ void processSerialCommand(String command) {
       Serial.println("Invalid range for Kp_outer (0-50)");
     }
   }
-  else if (parameter == "KI_OUTER" || parameter == "KIO") {
-    if (value >= 0 && value <= 50) {
-      Ki_outer = value;
-      parameterSet = true;
-      Serial.println("Ki_outer set to: " + String(Ki_outer, 3));
-    } else {
-      Serial.println("Invalid range for Ki_outer (0-50)");
-    }
-  }
-  else if (parameter == "KD_OUTER" || parameter == "KDO") {
-    if (value >= 0 && value <= 10) {
-      Kd_outer = value;
-      parameterSet = true;
-      Serial.println("Kd_outer set to: " + String(Kd_outer, 3));
-    } else {
-      Serial.println("Invalid range for Kd_outer (0-10)");
-    }
-  }
-  else if (parameter == "N_OUTER" || parameter == "NO") {
-    if (value >= 1 && value <= 1000) {
-      N_outer = value;
-      parameterSet = true;
-      Serial.println("N_outer set to: " + String(N_outer, 1));
-    } else {
-      Serial.println("Invalid range for N_outer (1-1000)");
-    }
-  }
-  // Inner PID parameters
-  else if (parameter == "KP_INNER" || parameter == "KPI") {
+  else if (command.startsWith("kpi") && command.length() > 3) {
+    // Inner PID Kp: kpi7 means set Kp_inner = 7
+    String valueStr = command.substring(3);
+    value = valueStr.toFloat();
     if (value >= 0 && value <= 10) {
       Kp_inner = value;
       parameterSet = true;
@@ -123,7 +68,22 @@ void processSerialCommand(String command) {
       Serial.println("Invalid range for Kp_inner (0-10)");
     }
   }
-  else if (parameter == "KI_INNER" || parameter == "KII") {
+  else if (command.startsWith("ki") && command.length() > 2 && !command.startsWith("kii")) {
+    // Outer PID Ki: ki5 means set Ki_outer = 5
+    String valueStr = command.substring(2);
+    value = valueStr.toFloat();
+    if (value >= 0 && value <= 50) {
+      Ki_outer = value;
+      parameterSet = true;
+      Serial.println("Ki_outer set to: " + String(Ki_outer, 3));
+    } else {
+      Serial.println("Invalid range for Ki_outer (0-50)");
+    }
+  }
+  else if (command.startsWith("kii") && command.length() > 3) {
+    // Inner PID Ki: kii8 means set Ki_inner = 8
+    String valueStr = command.substring(3);
+    value = valueStr.toFloat();
     if (value >= 0 && value <= 10) {
       Ki_inner = value;
       parameterSet = true;
@@ -132,7 +92,22 @@ void processSerialCommand(String command) {
       Serial.println("Invalid range for Ki_inner (0-10)");
     }
   }
-  else if (parameter == "KD_INNER" || parameter == "KDI") {
+  else if (command.startsWith("kd") && command.length() > 2 && !command.startsWith("kdi")) {
+    // Outer PID Kd: kd3 means set Kd_outer = 3
+    String valueStr = command.substring(2);
+    value = valueStr.toFloat();
+    if (value >= 0 && value <= 10) {
+      Kd_outer = value;
+      parameterSet = true;
+      Serial.println("Kd_outer set to: " + String(Kd_outer, 3));
+    } else {
+      Serial.println("Invalid range for Kd_outer (0-10)");
+    }
+  }
+  else if (command.startsWith("kdi") && command.length() > 3) {
+    // Inner PID Kd: kdi4 means set Kd_inner = 4
+    String valueStr = command.substring(3);
+    value = valueStr.toFloat();
     if (value >= 0 && value <= 5) {
       Kd_inner = value;
       parameterSet = true;
@@ -141,9 +116,23 @@ void processSerialCommand(String command) {
       Serial.println("Invalid range for Kd_inner (0-5)");
     }
   }
+  else if (command.startsWith("n") && command.length() > 1) {
+    // Outer PID N: n100 means set N_outer = 100
+    String valueStr = command.substring(1);
+    value = valueStr.toFloat();
+    if (value >= 1 && value <= 1000) {
+      N_outer = value;
+      parameterSet = true;
+      Serial.println("N_outer set to: " + String(N_outer, 1));
+    } else {
+      Serial.println("Invalid range for N_outer (1-1000)");
+    }
+  }
   else {
-    Serial.println("Unknown parameter: " + parameter);
-    Serial.println("Type HELP for available parameters.");
+    Serial.println("Unknown command: " + command);
+    Serial.println("Available commands: kp[value], kpi[value], ki[value], kii[value], kd[value], kdi[value], n[value]");
+    Serial.println("Examples: kp6, kpi7, ki5, kii8, kd3, kdi4, n100");
+    Serial.println("Type help for more information.");
   }
   
   // Reset integrators when PID parameters change

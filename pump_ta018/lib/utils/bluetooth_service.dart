@@ -17,6 +17,15 @@ class PumpParameters {
   String pumpMode;
   int startPump; // 1 for start, 0 for stop
   int basePressure;
+  
+  // === PARAMETER BARU UNTUK OPEN LOOP ===
+  int closeloop; // 1 for close loop, 0 for open loop
+  int sysPWM; // PWM percentage untuk systole high
+  int disPWM; // PWM percentage untuk diastole high
+  int sysPeriod; // Percentage durasi systole dalam cycle
+  int disPeriod; // Percentage durasi diastole dalam cycle
+  int sysHighPercent; // Percentage high phase dalam systole
+  int disHighPercent; // Percentage high phase dalam diastole
 
   PumpParameters({
     this.heartRate = 80,
@@ -32,6 +41,14 @@ class PumpParameters {
     this.pumpMode = "Otomatis",
     this.startPump = 0, // Default to stopped
     this.basePressure = 80,
+    // === DEFAULT VALUES UNTUK PARAMETER OPEN LOOP ===
+    this.closeloop = 1, // Default to close loop
+    this.sysPWM = 100, // Default systole PWM 100%
+    this.disPWM = 50, // Default diastole PWM 50%
+    this.sysPeriod = 50, // Default systole period 50%
+    this.disPeriod = 50, // Default diastole period 50%
+    this.sysHighPercent = 20, // Default systole high 20%
+    this.disHighPercent = 20, // Default diastole high 20%
   });
 
   Map<String, dynamic> toJson() {
@@ -49,6 +66,14 @@ class PumpParameters {
       'pumpMode': pumpMode,
       'startPump': startPump,
       'basePressure': basePressure,
+      // === TAMBAHAN UNTUK OPEN LOOP ===
+      'closeloop': closeloop,
+      'sysPWM': sysPWM,
+      'disPWM': disPWM,
+      'sysPeriod': sysPeriod,
+      'disPeriod': disPeriod,
+      'sysHighPercent': sysHighPercent,
+      'disHighPercent': disHighPercent,
     };
   }
 
@@ -67,6 +92,14 @@ class PumpParameters {
       pumpMode: json['pumpMode'] ?? "Otomatis",
       startPump: json['startPump'] ?? 0,
       basePressure: json['basePressure'] ?? 0,
+      // === TAMBAHAN UNTUK OPEN LOOP ===
+      closeloop: json['closeloop'] ?? 1,
+      sysPWM: json['sysPWM'] ?? 100,
+      disPWM: json['disPWM'] ?? 50,
+      sysPeriod: json['sysPeriod'] ?? 50,
+      disPeriod: json['disPeriod'] ?? 50,
+      sysHighPercent: json['sysHighPercent'] ?? 20,
+      disHighPercent: json['disHighPercent'] ?? 20,
     );
   }
 }
@@ -204,12 +237,13 @@ class BluetoothService extends ChangeNotifier {
   }
 
   // Add new mode to ESP32
-  Future<void> addMode(String modeName) async {
+  Future<void> addMode(String modeName, int closeloop) async {
     if (!_isConnected || _connection == null) return;
 
     final message = {
       'type': 'ADD_MODE',
       'modeName': modeName,
+      'closeloop': closeloop,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
 
@@ -231,25 +265,33 @@ class BluetoothService extends ChangeNotifier {
 
   // Send parameters to ESP32
   Future<void> setParameters(PumpParameters params) async {
-    if (!_isConnected || _connection == null) return;
+  if (!_isConnected || _connection == null) return;
 
-    final message = {
-      'type': 'SET_PARAMETERS',
-      'heartRate': params.heartRate,
-      'systolicPressure': params.systolicPressure,
-      'diastolicPressure': params.diastolicPressure,
-      'systolicPeriod': params.systolicPeriod,
-      'diastolicPeriod': params.diastolicPeriod,
-      'notchPressure': params.notchPressure,
-      'systolicPeakTime': params.systolicPeakTime,
-      'diastolicPeakTime': params.diastolicPeakTime,
-      'startPump': params.startPump,
-      'basePressure': params.basePressure,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-    };
+  final message = {
+    'type': 'SET_PARAMETERS',
+    'heartRate': params.heartRate,
+    'systolicPressure': params.systolicPressure,
+    'diastolicPressure': params.diastolicPressure,
+    'systolicPeriod': params.systolicPeriod,
+    'diastolicPeriod': params.diastolicPeriod,
+    'notchPressure': params.notchPressure,
+    'systolicPeakTime': params.systolicPeakTime,
+    'diastolicPeakTime': params.diastolicPeakTime,
+    'startPump': params.startPump,
+    'basePressure': params.basePressure,
+    // === PARAMETER BARU UNTUK OPEN LOOP ===
+    'closeloop': params.closeloop,
+    'sysPWM': params.sysPWM,
+    'disPWM': params.disPWM,
+    'sysPeriod': params.sysPeriod,
+    'disPeriod': params.disPeriod,
+    'sysHighPercent': params.sysHighPercent,
+    'disHighPercent': params.disHighPercent,
+    'timestamp': DateTime.now().millisecondsSinceEpoch,
+  };
 
-    await _sendMessage(message);
-  }
+  await _sendMessage(message);
+}
 
   // Send custom message to ESP32 (for flexibility)
   Future<void> sendCustomMessage(Map<String, dynamic> message) async {
@@ -314,45 +356,55 @@ class BluetoothService extends ChangeNotifier {
   // Process received messages from ESP32
   void _processReceivedMessage(String message) {
     try {
-      debugPrint('Received: $message');
+      
       final data = jsonDecode(message) as Map<String, dynamic>;
       final messageType = data['type'] as String;
 
       switch (messageType) {
         case 'MODE_CONFIRMED':
           _handleModeConfirmed(data);
+          debugPrint('Received: $message');
           break;
           
         case 'START_STOP_CONFIRMED':
           _handleStartStopConfirmed(data);
+          debugPrint('Received: $message');
           break;
           
         case 'DESIRED_PARAMETERS':
           _handleDesiredParameters(data);
+          debugPrint('Received: $message');
           break;
           
         case 'ACTUAL_PARAMETERS':
           _handleActualParameters(data);
+          
+          debugPrint('Received: $message');
           break;
           
         case 'PARAMETERS_SAVED':
           _handleParametersSaved(data);
+          debugPrint('Received: $message');
           break;
         
         case 'AVAILABLE_MODES':
           _handleAvailableModes(data);
+          debugPrint('Received: $message');
           break;
 
         case 'MODE_ADDED':
           _handleModeAdded(data);
+          debugPrint('Received: $message');
           break;
 
         case 'MODE_DELETED':
           _handleModeDeleted(data);
+          debugPrint('Received: $message');
           break;
           
         case 'ERROR':
           _handleError(data);
+          debugPrint('Received: $message');
           break;
           
         default:
@@ -394,8 +446,17 @@ class BluetoothService extends ChangeNotifier {
       pumpMode: data['mode'] ?? _parameters.pumpMode,
       startPump: data['startPump'] ?? _parameters.startPump,
       basePressure: data['basePressure'] ?? _parameters.basePressure,
+
+      // === PARAMETER BARU UNTUK OPEN LOOP ===
+      closeloop: data['closeloop'] ?? _parameters.closeloop,                   // close loop 1 open loop 0
+      sysPWM: data['sysPWM'] ?? _parameters.sysPWM,                            // percent pump power saat systole high
+      disPWM: data['disPWM'] ?? _parameters.disPWM,                            // percent pump power saat diastole high
+      sysPeriod: data['sysPeriod'] ?? _parameters.sysPeriod,                   // period systole dalam persen dari period hear pulse (diambil dari bpm)
+      disPeriod: data['disPeriod'] ?? _parameters.disPeriod,                   // period diastole dalam persen dari period hear pulse (diambil dari bpm)
+      sysHighPercent: data['sysHighPercent'] ?? _parameters.sysHighPercent,    // periode high sistol dalam persen dari period sistole
+      disHighPercent: data['disHighPercent'] ?? _parameters.disHighPercent,    // perioda high diastol dalam persen dari period diastole
     );
-    
+  
     _parametersController.add(_parameters);
     notifyListeners();
     debugPrint('Desired parameters updated');
@@ -407,7 +468,7 @@ class BluetoothService extends ChangeNotifier {
     
     _parametersController.add(_parameters);
     notifyListeners();
-    debugPrint('Actual parameters updated: Flow=${_parameters.flowRate}, Pressure=${_parameters.pressureActual}');
+    // debugPrint('Actual parameters updated: Flow=${_parameters.flowRate}, Pressure=${_parameters.pressureActual}');
   }
 
   void _handleAvailableModes(Map<String, dynamic> data) {

@@ -1,3 +1,4 @@
+// task_sdworker.ino
 #include "tasks.h"
 #include <SD.h>
 
@@ -45,7 +46,7 @@ bool loadParametersFromSD(String modeName) {
     return false;
   }
   
-  // Read parameters line by line
+  // Read parameters line by line - format urutan sesuai yang disimpan
   pumpParams.pumpMode = modeName;
   pumpParams.heartRate = file.readStringUntil('\n').toInt();
   pumpParams.basePressure = file.readStringUntil('\n').toInt();
@@ -57,13 +58,22 @@ bool loadParametersFromSD(String modeName) {
   pumpParams.systolicPeakTime = file.readStringUntil('\n').toInt();
   pumpParams.diastolicPeakTime = file.readStringUntil('\n').toInt();
   
+  // === PARAMETER BARU UNTUK OPEN LOOP ===
+  pumpParams.closeloop = file.readStringUntil('\n').toInt();
+  pumpParams.sysPWM = file.readStringUntil('\n').toInt();
+  pumpParams.disPWM = file.readStringUntil('\n').toInt();
+  pumpParams.sysPeriod = file.readStringUntil('\n').toInt();
+  pumpParams.disPeriod = file.readStringUntil('\n').toInt();
+  pumpParams.sysHighPercent = file.readStringUntil('\n').toInt();
+  pumpParams.disHighPercent = file.readStringUntil('\n').toInt();
+  
   file.close();
   
   Serial.println("Parameters loaded for mode: " + modeName);
   return true;
 }
 
-// Save current parameters to SD card
+// Modifikasi saveParametersToSD() - menambahkan parameter open loop
 bool saveParametersToSD() {
   File file = SD.open("/" + pumpParams.pumpMode + ".txt", FILE_WRITE);
   if (!file) {
@@ -71,7 +81,7 @@ bool saveParametersToSD() {
     return false;
   }
   
-  // Write parameters line by line
+  // Write parameters line by line - urutan harus sama dengan load
   file.println(pumpParams.heartRate);
   file.println(pumpParams.basePressure);
   file.println(pumpParams.systolicPressure);
@@ -82,13 +92,22 @@ bool saveParametersToSD() {
   file.println(pumpParams.systolicPeakTime);
   file.println(pumpParams.diastolicPeakTime);
   
+  // === PARAMETER BARU UNTUK OPEN LOOP ===
+  file.println(pumpParams.closeloop);
+  file.println(pumpParams.sysPWM);
+  file.println(pumpParams.disPWM);
+  file.println(pumpParams.sysPeriod);
+  file.println(pumpParams.disPeriod);
+  file.println(pumpParams.sysHighPercent);
+  file.println(pumpParams.disHighPercent);
+  
   file.close();
   
   Serial.println("Parameters saved for mode: " + pumpParams.pumpMode);
   return true;
 }
 
-// Add new mode to SD card
+// Modifikasi addModeToSD() - menambahkan parameter open loop
 bool addModeToSD(PumpParameters mode) {
   // Check if mode already exists
   if (SD.exists("/" + mode.pumpMode + ".txt")) {
@@ -102,7 +121,7 @@ bool addModeToSD(PumpParameters mode) {
     return false;
   }
   
-  // Write parameters line by line
+  // Write parameters line by line - urutan harus sama dengan load dan save
   file.println(mode.heartRate);
   file.println(mode.basePressure);
   file.println(mode.systolicPressure);
@@ -112,6 +131,15 @@ bool addModeToSD(PumpParameters mode) {
   file.println(mode.notchPressure);
   file.println(mode.systolicPeakTime);
   file.println(mode.diastolicPeakTime);
+  
+  // === PARAMETER BARU UNTUK OPEN LOOP ===
+  file.println(mode.closeloop);
+  file.println(mode.sysPWM);
+  file.println(mode.disPWM);
+  file.println(mode.sysPeriod);
+  file.println(mode.disPeriod);
+  file.println(mode.sysHighPercent);
+  file.println(mode.disHighPercent);
   
   file.close();
   

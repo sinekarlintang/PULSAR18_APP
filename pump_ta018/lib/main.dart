@@ -27,7 +27,7 @@ class MyApp extends StatelessWidget {
         theme: ThemeData(
           primarySwatch: Colors.blue,
           fontFamily: 'Inter',
-          useMaterial3: true, // Added for better Material Design support
+          useMaterial3: true, 
         ),
         initialRoute: '/',
         routes: {

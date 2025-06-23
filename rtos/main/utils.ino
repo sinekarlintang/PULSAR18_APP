@@ -7,7 +7,7 @@ extern volatile unsigned long lastPulseTime;
 
 std::vector<String> getAvailableModesFromSD() {
   std::vector<String> modes;
-  
+   
   File root = SD.open("/");
   if (!root) {
     Serial.println("Failed to open SD card directory");
@@ -55,7 +55,6 @@ void initializeSDCard() {
   Serial.println("Initializing SD card...");
   if (!SD.begin(SD_CS)) {
     Serial.println("SD card initialization failed!");
-    while (1); // Halt if SD card fails
   }
   Serial.println("SD card initialized.");
 }

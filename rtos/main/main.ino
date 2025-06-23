@@ -2,7 +2,7 @@
 
 void setup() {
   Serial.begin(115200);
-  SerialBT.begin("ESP32_Pump_Controller");
+  SerialBT.begin("PULSAR18_V1");
   Serial.println("ESP32 Bluetooth Ready. Waiting for connection...");
 
   pinMode(sensorPin, INPUT_PULLUP);
@@ -21,12 +21,12 @@ void setup() {
 
   // Task init
   // kalau ingin matikan bluetooth dan sd card, hanya jalankan kontrol, comment ini
-  xTaskCreatePinnedToCore(TaskSDWorker, "SDWorker", 4096, NULL, 1, NULL, 0);      // Sd card works
-  xTaskCreatePinnedToCore(TaskSendActual, "SendActual", 4096, NULL, 1, NULL, 0);  // ngirim data sensor ke app terus terusan
-  xTaskCreatePinnedToCore(TaskBluetooth, "BT", 4096, NULL, 2, NULL, 0);           // bluetooth handling
+  // xTaskCreatePinnedToCore(TaskSDWorker, "SDWorker", 4096, NULL, 1, NULL, 0);      // Sd card works
+  // xTaskCreatePinnedToCore(TaskSendActual, "SendActual", 4096, NULL, 1, NULL, 0);  // ngirim data sensor ke app terus terusan
+  // xTaskCreatePinnedToCore(TaskBluetooth, "BT", 4096, NULL, 2, NULL, 0);           // bluetooth handling
 
   xTaskCreatePinnedToCore(TaskSerialDebug, "Serial", 4096, NULL, 1, NULL, 0);     // ini klo mau ganti kp ki kd / start stop lewat serial
-  xTaskCreatePinnedToCore(TaskSensor, "Sensor", 4096, NULL, 2, NULL, 0);          // task ini untuk baca flowrate saja
+  // xTaskCreatePinnedToCore(TaskSensor, "Sensor", 4096, NULL, 2, NULL, 0);          // task ini untuk baca flowrate saja
 
   xTaskCreatePinnedToCore(TaskControl, "Control", 4096, NULL, 3, NULL, 1);        // baca pressure sensor and control
 

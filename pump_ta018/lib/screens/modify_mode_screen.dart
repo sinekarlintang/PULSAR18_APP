@@ -1,3 +1,4 @@
+// modify_mode_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pump_ta018/utils/font_size.dart';
@@ -17,6 +18,13 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
   // --- STATE ---------------------------------------------------------------
   String? _selectedMode;
   bool _isConnected = false;
+  bool _isOpenLoop(String? mode) {
+    final bluetoothService = Provider.of<BluetoothService>(context, listen: false);
+    if (bluetoothService.parameters.closeloop == 0) {
+      return true;
+    }
+    return false; // Default to closed loop if unknown
+  }
   
   // Track which fields are being edited to prevent overwriting user input
   final Set<String> _activelyEditingFields = {};
@@ -33,6 +41,13 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
     'diastolicPeakTime': TextEditingController(),
     'flowRate': TextEditingController(),
     'basePressure': TextEditingController(),
+    // New open loop parameters
+    'sysPWM': TextEditingController(),
+    'disPWM': TextEditingController(),
+    'sysPeriod': TextEditingController(),
+    'disPeriod': TextEditingController(),
+    'sysHighPercent': TextEditingController(),
+    'disHighPercent': TextEditingController(),
   };
 
   // Focus nodes to track when fields are being edited
@@ -47,6 +62,13 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
     'diastolicPeakTime': FocusNode(),
     'flowRate': FocusNode(),
     'basePressure': FocusNode(),
+    // New open loop focus nodes
+    'sysPWM': FocusNode(),
+    'disPWM': FocusNode(),
+    'sysPeriod': FocusNode(),
+    'disPeriod': FocusNode(),
+    'sysHighPercent': FocusNode(),
+    'disHighPercent': FocusNode(),
   };
 
   @override
@@ -153,6 +175,26 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
     if (!_activelyEditingFields.contains('basePressure')) {
       _controllers['basePressure']?.text = parameters.basePressure.toString();
     }
+    
+    // Update new open loop parameters
+    if (!_activelyEditingFields.contains('sysPWM')) {
+      _controllers['sysPWM']?.text = parameters.sysPWM.toString();
+    }
+    if (!_activelyEditingFields.contains('disPWM')) {
+      _controllers['disPWM']?.text = parameters.disPWM.toString();
+    }
+    if (!_activelyEditingFields.contains('sysPeriod')) {
+      _controllers['sysPeriod']?.text = parameters.sysPeriod.toString();
+    }
+    if (!_activelyEditingFields.contains('disPeriod')) {
+      _controllers['disPeriod']?.text = parameters.disPeriod.toString();
+    }
+    if (!_activelyEditingFields.contains('sysHighPercent')) {
+      _controllers['sysHighPercent']?.text = parameters.sysHighPercent.toString();
+    }
+    if (!_activelyEditingFields.contains('disHighPercent')) {
+      _controllers['disHighPercent']?.text = parameters.disHighPercent.toString();
+    }
   }
 
   Future<void> _loadParametersForMode(String mode) async {
@@ -234,43 +276,70 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
       return;
     }
 
-    final ctrl = TextEditingController();
-    final newMode = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add New Mode'),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(hintText: 'Mode name'),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
+    final nameCtrl = TextEditingController();
+    int selectedModeType = 1; // Default to close loop
 
-    if (newMode != null && newMode.isNotEmpty) {
-      // Send command to ESP32 to add new mode
-      await _sendAddModeCommand(newMode);
+final result = await showDialog<Map<String, dynamic>>(
+  context: context,
+  builder: (ctx) => StatefulBuilder(
+    builder: (context, setState) => AlertDialog(
+      title: const Text('Add New Mode'),
+      content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(hintText: 'Mode name'),
+                autofocus: true,
+              ),
+              const SizedBox(height: 16),
+              const Text('Mode Type:', style: TextStyle(fontWeight: FontWeight.bold)),
+              RadioListTile<int>(
+                title: const Text('Heart Pulse Simulator'),
+                subtitle: const Text('Closed loop pressure control'),
+                value: 1,
+                groupValue: selectedModeType,
+                onChanged: (value) => setState(() => selectedModeType = value!),
+              ),
+              RadioListTile<int>(
+                title: const Text('Manual Pump Power Configuration'),
+                subtitle: const Text('Open loop power control'),
+                value: 0,
+                groupValue: selectedModeType,
+                onChanged: (value) => setState(() => selectedModeType = value!),
+              ),
+            ],
+          ),
+        
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, {
+            'name': nameCtrl.text.trim(),
+            'closeloop': selectedModeType,
+          }),
+          child: const Text('Add'),
+        ),
+      ],
+    ),
+  ),
+);
+    if (result != null && result['name'].isNotEmpty) {
+      await _sendAddModeCommand(result['name'], result['closeloop']);
     }
   }
 
-  Future<void> _sendAddModeCommand(String modeName) async {
+  Future<void> _sendAddModeCommand(String modeName, int closeloop) async {
     final bluetoothService = Provider.of<BluetoothService>(context, listen: false);
     
-    final message = modeName;
-
     try {
-      await bluetoothService.addMode(message);
-      _showMessage('Mode "$modeName" added successfully');
+      await bluetoothService.addMode(modeName, closeloop);
+      _showMessage('Mode "$modeName" "$closeloop" added successfully');
       // Refresh available modes
       await bluetoothService.getAvailableModes();
     } catch (e) {
@@ -317,6 +386,14 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
         pumpMode: _selectedMode!,
         startPump: bluetoothService.parameters.startPump,
         pressureActual: bluetoothService.parameters.pressureActual,
+        closeloop: bluetoothService.parameters.closeloop,
+        // New open loop parameters
+        sysPWM: int.tryParse(_controllers['sysPWM']?.text ?? '50') ?? 50,
+        disPWM: int.tryParse(_controllers['disPWM']?.text ?? '30') ?? 30,
+        sysPeriod: int.tryParse(_controllers['sysPeriod']?.text ?? '60') ?? 60,
+        disPeriod: 100 - (int.tryParse(_controllers['sysPeriod']?.text ?? '60') ?? 60),
+        sysHighPercent: int.tryParse(_controllers['sysHighPercent']?.text ?? '50') ?? 50,
+        disHighPercent: int.tryParse(_controllers['disHighPercent']?.text ?? '30') ?? 30,
       );
 
       await bluetoothService.setParameters(parameters);
@@ -332,10 +409,7 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
       children: [
         Text(
           '$label:',
-          style: TextStyle(
-            fontSize: FontSizes.medium(context),
-            fontWeight: FontWeight.w600,
-            fontFamily: 'Inter',
+          style: TextStyle( fontSize: FontSizes.medium(context), fontWeight: FontWeight.w600, fontFamily: 'Inter',
           ),
         ),
         const SizedBox(height: 4),
@@ -376,6 +450,18 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
         const SizedBox(height: 10),
       ],
     );
+  }
+
+  // Helper method to get mode type color
+  Color _getModeTypeColor(String mode) {
+    final bluetoothService = Provider.of<BluetoothService>(context, listen: false);
+    // Check if this mode is open loop (closeloop == 0) or closed loop (closeloop == 1)
+    // You would need to get this information from the bluetooth service
+    // For now, assuming you can get the closeloop value for the mode
+    if (bluetoothService.parameters.pumpMode == mode) {
+      return bluetoothService.parameters.closeloop == 1 ? Colors.blue : Colors.green;
+    }
+    return Colors.black; // Default color
   }
 
   @override
@@ -431,6 +517,7 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
                     builder: (context, bluetoothService, child) {
                       final availableModes = bluetoothService.availableModes;
                       _isConnected = bluetoothService.isConnected;
+                      final isOpenLoop = bluetoothService.parameters.closeloop == 0;
 
                       return Row(
                         children: [
@@ -494,6 +581,8 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
                                             itemBuilder: (ctx, i) {
                                               final mode = availableModes[i];
                                               final selected = mode == _selectedMode;
+                                              // Get color based on mode type (you'll need to implement this logic)
+                                              final textColor = _getModeTypeColor(mode);
 
                                               return GestureDetector(
                                                 onLongPress: () {
@@ -507,10 +596,11 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
                                                     style: TextStyle(
                                                       fontSize: FontSizes.small(context),
                                                       fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                                                      color: textColor,
                                                     ),
                                                   ),
                                                   selected: selected,
-                                                  selectedTileColor: Colors.blue.withOpacity(0.1),
+                                                  selectedTileColor: _getModeTypeColor(mode).withOpacity(0.1),
                                                   onTap: () {
                                                     setState(() => _selectedMode = mode);
                                                     if (_isConnected) {
@@ -610,9 +700,22 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
                           Expanded(
                             flex: 4,
                             child: Column(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment: MainAxisAlignment.start,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (isOpenLoop) ...[
+                                      Text( 'Manual Pump Power Configuration', style: TextStyle( fontSize: FontSizes.medium(context), fontWeight: FontWeight.w700, fontFamily: 'Inter',),),
+                                      Text( 'Open loop power control', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700],), ),
+                                    ] else ...[
+                                      Text( 'Heart Pulse Simulator', style: TextStyle( fontSize: FontSizes.medium(context), fontWeight: FontWeight.w700, fontFamily: 'Inter',),),
+                                      Text( 'Closed loop pressure control', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700],), ),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height:  20),
                                 Expanded(
                                   child: SingleChildScrollView(
                                     child: Row(
@@ -622,11 +725,26 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              _buildEditableParameter('Heart Rate', 'BPM', 'heartRate'),
-                                              _buildEditableParameter('Systolic Peak Pressure', 'mmHg', 'systolicPressure'),
-                                              _buildEditableParameter('Diastolic Peak Pressure', 'mmHg', 'diastolicPressure'),
-                                              _buildEditableParameter('Diastolic Base Pressure', 'mmHg', 'basePressure'),
-                                              _buildEditableParameter('Notch Pressure', 'mmHg', 'notchPressure'),
+                                              if (isOpenLoop) ...[
+                                                _buildEditableParameter('Systole Pump Power', '% pump power', 'sysPWM'),
+                                                _buildEditableParameter('Systole High Period', '% of systole Period', 'sysHighPercent'),
+                                                _buildEditableParameter('Systole Period', '% of pulse period', 'sysPeriod'),
+                                                Text(
+                                                  'Diastole Period: ${100 - (int.tryParse(_controllers['sysPeriod']?.text ?? '60') ?? 60)}%',
+                                                  style: TextStyle(
+                                                    fontSize: FontSizes.small(context),
+                                                    fontWeight: FontWeight.w500,
+                                                    fontFamily: 'Inter',
+                                                    color: Colors.grey[700],
+                                                  ),
+                                                ),
+                                              ] else ...[
+                                                _buildEditableParameter('Heart Rate', 'BPM', 'heartRate'),
+                                                _buildEditableParameter('Systolic Peak Pressure', 'mmHg', 'systolicPressure'),
+                                                _buildEditableParameter('Diastolic Peak Pressure', 'mmHg', 'diastolicPressure'),
+                                                _buildEditableParameter('Diastolic Base Pressure', 'mmHg', 'basePressure'),
+                                                const SizedBox(height: 20),
+                                              ],
                                             ],
                                           ),
                                         ),
@@ -636,20 +754,27 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              _buildEditableParameter('Flow Rate', 'ml/min', 'flowRate'),
-                                              _buildEditableParameter('Systolic Peak Time', 'ms', 'systolicPeakTime'),
-                                              _buildEditableParameter('Diastolic Peak Time', 'ms', 'diastolicPeakTime'),
-                                              _buildEditableParameter('Systolic Period', '%', 'systolicPeriod'),
-                                              Text(
-                                                'Diastolic Period: ${100 - (int.tryParse(_controllers['systolicPeriod']?.text ?? '60') ?? 60)}%',
-                                                style: TextStyle(
-                                                  fontSize: FontSizes.small(context),
-                                                  fontWeight: FontWeight.w500,
-                                                  fontFamily: 'Inter',
-                                                  color: Colors.grey[700],
+                                              if (isOpenLoop) ...[
+                                                _buildEditableParameter('Diastole Pump Power', '% pump power', 'disPWM'),
+                                                _buildEditableParameter('Diastole High Period', '% of diastole period', 'disHighPercent'),
+                                                _buildEditableParameter('Heart Rate', 'BPM', 'heartRate'),
+                                                const SizedBox(height: 20),
+                                              ] else ...[
+                                                _buildEditableParameter('Notch Pressure', 'mmHg', 'notchPressure'),
+                                                _buildEditableParameter('Systolic Peak Time', 'ms', 'systolicPeakTime'),
+                                                _buildEditableParameter('Diastolic Peak Time', 'ms', 'diastolicPeakTime'),
+                                                _buildEditableParameter('Systolic Period', '%', 'systolicPeriod'),
+                                                Text(
+                                                  'Diastolic Period: ${100 - (int.tryParse(_controllers['systolicPeriod']?.text ?? '60') ?? 60)}%',
+                                                  style: TextStyle(
+                                                    fontSize: FontSizes.small(context),
+                                                    fontWeight: FontWeight.w500,
+                                                    fontFamily: 'Inter',
+                                                    color: Colors.grey[700],
+                                                  ),
                                                 ),
-                                              ),
-                                              const SizedBox(height: 60),
+                                                
+                                              ],
                                             ],
                                           ),
                                         ),
@@ -681,9 +806,8 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
                             ),
                           ),
                           const SizedBox(width: 20),
-
                           // =========================================================
-                          // PANEL KANAN (Dynamic Pressure Graph)
+                          // PANEL KANAN (Dynamic Graph)
                           // =========================================================
                           Expanded(
                             flex: 4,
@@ -703,21 +827,29 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-
                                           const SizedBox(height: 8),
                                           Expanded(
                                             child: CustomPaint(
                                               size: Size.infinite,
-                                              painter: PressureWaveformPainter(
-                                                systolicPressure: int.tryParse(_controllers['systolicPressure']?.text ?? '120') ?? 120,
-                                                diastolicPressure: int.tryParse(_controllers['diastolicPressure']?.text ?? '80') ?? 80,
-                                                notchPressure: int.tryParse(_controllers['notchPressure']?.text ?? '60') ?? 60,
-                                                systolicPeriod: int.tryParse(_controllers['systolicPeriod']?.text ?? '60') ?? 60,
-                                                systolicPeakTime: int.tryParse(_controllers['systolicPeakTime']?.text ?? '0') ?? 0,
-                                                diastolicPeakTime: int.tryParse(_controllers['diastolicPeakTime']?.text ?? '0') ?? 0,
-                                                heartRate: int.tryParse(_controllers['heartRate']?.text ?? '80') ?? 80,
-                                                basePressure: int.tryParse(_controllers['basePressure']?.text ?? '80') ?? 80,
-                                              ),
+                                              painter: _isOpenLoop(_selectedMode) 
+                                                ? PumpPowerWaveformPainter(
+                                                    sysPWM: int.tryParse(_controllers['sysPWM']?.text ?? '80') ?? 80,
+                                                    disPWM: int.tryParse(_controllers['disPWM']?.text ?? '60') ?? 60,
+                                                    sysPeriod: int.tryParse(_controllers['sysPeriod']?.text ?? '60') ?? 60,
+                                                    heartRate: int.tryParse(_controllers['heartRate']?.text ?? '80') ?? 80,
+                                                    sysHighPercent: int.tryParse(_controllers['sysHighPercent']?.text ?? '50') ?? 50,
+                                                    disHighPercent: int.tryParse(_controllers['disHighPercent']?.text ?? '50') ?? 50,
+                                                  )
+                                                : PressureWaveformPainter(
+                                                    systolicPressure: int.tryParse(_controllers['systolicPressure']?.text ?? '120') ?? 120,
+                                                    diastolicPressure: int.tryParse(_controllers['diastolicPressure']?.text ?? '80') ?? 80,
+                                                    notchPressure: int.tryParse(_controllers['notchPressure']?.text ?? '60') ?? 60,
+                                                    systolicPeriod: int.tryParse(_controllers['systolicPeriod']?.text ?? '60') ?? 60,
+                                                    systolicPeakTime: int.tryParse(_controllers['systolicPeakTime']?.text ?? '0') ?? 0,
+                                                    diastolicPeakTime: int.tryParse(_controllers['diastolicPeakTime']?.text ?? '0') ?? 0,
+                                                    heartRate: int.tryParse(_controllers['heartRate']?.text ?? '80') ?? 80,
+                                                    basePressure: int.tryParse(_controllers['basePressure']?.text ?? '80') ?? 80,
+                                                  ),
                                             ),
                                           ),
                                         ],
@@ -736,7 +868,9 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
                                     child: Padding(
                                       padding: EdgeInsets.all(8.0),
                                       child: Image.asset(
-                                        'assets/image/pressureGraph.png',
+                                        _isOpenLoop(_selectedMode) 
+                                          ? 'assets/image/pumpPowerGraph.png'
+                                          : 'assets/image/pressureGraph.png',
                                         fit: BoxFit.contain,
                                       ),
                                     ),
@@ -779,6 +913,195 @@ class _ModifyModeScreenState extends State<ModifyModeScreen> {
         ],
       ),
     );
+  }
+}
+
+class PumpPowerWaveformPainter extends CustomPainter {
+  final int sysPWM;
+  final int disPWM;
+  final int sysPeriod;
+  final int heartRate;
+  final int sysHighPercent;
+  final int disHighPercent;
+
+  PumpPowerWaveformPainter({
+    required this.sysPWM,
+    required this.disPWM,
+    required this.sysPeriod,
+    required this.heartRate,
+    required this.sysHighPercent,
+    required this.disHighPercent,
+  });
+
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.green
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+
+    final gridPaint = Paint()
+      ..color = Colors.grey.withOpacity(0.3)
+      ..strokeWidth = 1.0;
+
+    final labelPaint = TextStyle(
+      color: Colors.black54,
+      fontSize: 10,
+      fontFamily: 'monospace',
+    );
+
+    // Draw grid
+    // Vertical grid lines (time)
+    for (int i = 0; i <= 10; i++) {
+      final x = (i / 10.0) * size.width;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+    }
+    // Horizontal grid lines (pressure)
+    for (int i = 0; i <= 8; i++) {
+      final y = (i / 8.0) * size.height;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+    
+    // Draw labels
+    _drawLabels(canvas, size, labelPaint);
+
+    // Calculate waveform parameters
+    final cycleTime = 60.0 / heartRate; // seconds per cycle
+    final systolicDuration = (sysPeriod / 100.0) * cycleTime;
+    final diastolicDuration = cycleTime - systolicDuration;
+    
+    // Number of cycles to show
+    const numCycles = 2.3;
+    final totalTime = numCycles * cycleTime;
+    
+    final path = Path();
+    final pointsPerSecond = 100;
+    final totalPoints = (totalTime * pointsPerSecond).round();
+    // Power range for scaling (0-100%)
+    const minPower = 0;
+    const maxPower = 100;
+    const powerRange = maxPower - minPower;
+
+    bool firstPoint = true;
+    
+    for (int i = 0; i <= totalPoints; i++) {
+      final t = (i / pointsPerSecond) % cycleTime;
+      final x = (i / totalPoints.toDouble()) * size.width;
+      
+      double power;
+      
+      if (t <= systolicDuration) {
+        // Systolic phase
+        final systolicProgress = t / systolicDuration;
+        power = _calculateSystolicPower(systolicProgress);
+      } else {
+        // Diastolic phase
+        final diastolicProgress = (t - systolicDuration) / diastolicDuration;
+        power = _calculateDiastolicPower(diastolicProgress);
+      }
+      
+      final y = size.height - ((power - minPower) / powerRange) * size.height;
+      
+      if (firstPoint) {
+        path.moveTo(x, y);
+        firstPoint = false;
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    
+    canvas.drawPath(path, paint);
+  }
+
+  double _calculateSystolicPower(double progress) {
+    final highDuration = sysHighPercent / 100.0; // High period as fraction of systolic period
+    
+    if (progress <= highDuration) {
+      // High power period
+      return sysPWM.toDouble();
+    } else {
+      return 0;
+    }
+  }
+
+  double _calculateDiastolicPower(double progress) {
+    final highDuration = disHighPercent / 100.0; // High period as fraction of diastolic period
+    
+    if (progress <= highDuration) {
+      return disPWM.toDouble();
+    } else {
+      return 0;
+    }
+  }
+
+  void _drawLabels(Canvas canvas, Size size, TextStyle labelStyle) {
+    // Y-axis labels (power percentage)
+    for (int i = 0; i <= 10; i++) {
+      final power = 100 - (i * 10); // 100%, 90%, 80%, ... 0%
+      final y = (i / 10.0) * size.height;
+      
+      final textSpan = TextSpan(
+        text: '$power%',
+        style: labelStyle,
+      );
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      
+      // Draw label to the left of the graph
+      textPainter.paint(canvas, Offset(-35, y - textPainter.height / 2));
+    }
+    
+    // X-axis labels (time)
+    final cycleTime = 60.0 / heartRate;
+    const numCycles = 2.3;
+    final totalTime = numCycles * cycleTime;
+    
+    for (int i = 0; i <= 5; i++) {
+      final time = (i / 5.0) * totalTime;
+      final x = (i / 5.0) * size.width;
+      
+      final textSpan = TextSpan(
+        text: '${time.toStringAsFixed(1)}s',
+        style: labelStyle,
+      );
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      
+      // Draw label below the graph
+      textPainter.paint(canvas, Offset(x - textPainter.width / 2, size.height + 5));
+    }
+    
+    // Title
+    final titleSpan = TextSpan(
+      text: 'Pump Power Waveform Preview (%)',
+      style: labelStyle.copyWith(
+        fontSize: 12,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+    final titlePainter = TextPainter(
+      text: titleSpan,
+      textDirection: TextDirection.ltr,
+    );
+    titlePainter.layout();
+    titlePainter.paint(canvas, Offset((size.width - titlePainter.width) / 2, -25));
+  }
+
+  @override
+  bool shouldRepaint(PumpPowerWaveformPainter oldDelegate) {
+    return sysPWM != oldDelegate.sysPWM ||
+           disPWM != oldDelegate.disPWM ||
+           sysPeriod != oldDelegate.sysPeriod ||
+           heartRate != oldDelegate.heartRate ||
+           sysHighPercent != oldDelegate.sysHighPercent ||
+           disHighPercent != oldDelegate.disHighPercent;
   }
 }
 

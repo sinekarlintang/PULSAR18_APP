@@ -174,6 +174,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildPressureChart(PumpParameters parameters) {
+    final bluetoothService = Provider.of<BluetoothService>(context, listen: false);
     // Always update data grafik dengan pressure terbaru (continuously monitor pressureActual)
     if (parameters.pressureActual > 0) {
       // Hanya update jika ada perubahan nilai yang signifikan
@@ -189,9 +190,40 @@ class _MainScreenState extends State<MainScreen> {
     final double maxX = maxDataPoints * 0.1; // Each data point is 0.1 seconds
     final double minX = 0.0;
 
-    // Calculate y-axis range based on parameters
-    final double maxY = parameters.systolicPressure + 20;
-    final double minY = parameters.basePressure - 20;
+
+    // Calculate y-axis range based on closeloop status
+    double maxY, minY;
+    
+    if (bluetoothService.parameters.closeloop == 1) {
+      // Close loop mode: gunakan parameter yang ditentukan
+      maxY = parameters.systolicPressure + 20;
+      minY = parameters.basePressure - 20;
+    } else {
+      // Open loop mode: gunakan range berdasarkan data aktual
+      if (_pressureData.isNotEmpty) {
+        // Cari nilai max dan min dari data aktual
+        double dataMax = _pressureData.map((e) => e.y).reduce((a, b) => a > b ? a : b);
+        double dataMin = _pressureData.map((e) => e.y).reduce((a, b) => a < b ? a : b);
+        
+        // Tambahkan margin untuk visualisasi yang lebih baik
+        double range = dataMax - dataMin;
+        double margin = range > 0 ? range * 0.2 : 20; // 20% margin atau minimal 20
+        
+        maxY = dataMax + margin;
+        minY = dataMin - margin;
+        
+        // Pastikan ada range minimum untuk menghindari grafik yang terlalu flat
+        if (maxY - minY < 40) {
+          double center = (maxY + minY) / 2;
+          maxY = center + 20;
+          minY = center - 20;
+        }
+      } else {
+        // Fallback jika tidak ada data
+        maxY = 200;
+        minY = 0;
+      }
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -626,100 +658,184 @@ class _MainScreenState extends State<MainScreen> {
 
   /// Pisahkan bagian parameter‑parameter supaya rapih dibaca.
   Widget _buildParameterPanels(BuildContext context, PumpParameters parameters) {
-    return Row(
-      children: [
-        // ---------- Kolom kiri ----------
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Heart Rate:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
-              Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
-                Text('${parameters.heartRate}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
-                const SizedBox(width: 10),
-                Text('BPM', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              ],),
-              Text('Systolic Peak:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
-              Text('Pressure', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
-                Text('${parameters.systolicPressure}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
-                const SizedBox(width: 10),
-                Text('mmhg', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              ],),
-              Text('Diastolic Peak:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
-              Text('Pressure', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
-                Text('${parameters.diastolicPressure}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
-                const SizedBox(width: 10),
-                Text('mmhg', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              ],),
-              Text('Diastolic Base Pressure', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
-                Text('${parameters.basePressure}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
-                const SizedBox(width: 10),
-                Text('mmhg', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              ],),
-              Text('Systolic/Diastolic Period:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
-              Text('Ratio', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
-                Text('${parameters.systolicPeriod}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
-                const SizedBox(width: 10),
-                Text('%', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-                const SizedBox(width: 10),
-                Text('/',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
-                const SizedBox(width: 10),
-                Text('${parameters.diastolicPeriod}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
-                const SizedBox(width: 10),
-                Text('%', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-                const SizedBox(width: 10),
-              ],),
-            ],
+    // Check if it's close loop (1) or open loop (0)
+    if (parameters.closeloop == 1) {
+      // CLOSE LOOP - Original parameters display
+      return Row(
+        children: [
+          // ---------- Kolom kiri ----------
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Heart Rate:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.heartRate}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('BPM', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+                Text('Systolic Peak:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Text('Pressure', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.systolicPressure}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('mmhg', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+                Text('Diastolic Peak:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Text('Pressure', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.diastolicPressure}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('mmhg', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+                Text('Diastolic Base Pressure', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.basePressure}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('mmhg', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+                Text('Systolic/Diastolic Period:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Text('Ratio', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.systolicPeriod}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('%', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                  const SizedBox(width: 10),
+                  Text('/',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('${parameters.diastolicPeriod}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('%', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                  const SizedBox(width: 10),
+                ],),
+              ],
+            ),
           ),
-        ),
 
-        // ---------- Kolom kanan ----------
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Flow Rate:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
-              Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
-                Text('${parameters.flowRate}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
-                const SizedBox(width: 10),
-                Text('ml/min', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              ],),
-              Text('Systolic Peak:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',color: Colors.white, ),),
-              Text('Time', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
-                Text('${parameters.systolicPeakTime}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
-                const SizedBox(width: 10),
-                Text('ms', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              ],),
-              Text('Diastolic Peak:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',color: Colors.white, ),),
-              Text('Time', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
-                Text('${parameters.diastolicPeakTime}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
-                const SizedBox(width: 10),
-                Text('ms', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              ],),
-              Text('Diastolic Base Pressure', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter',color: Colors.white, ), ),
-              Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
-                Text('${parameters.basePressure}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', color: Colors.white,), ),
-                const SizedBox(width: 10),
-                Text('mmhg', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.white, ), ),
-              ],),
-              Text('Notch:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
-              Text('Pressure', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-              Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
-                Text('${parameters.notchPressure}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
-                const SizedBox(width: 10),
-                Text('mmhg', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
-                
-              ],),
-            ],
+          // ---------- Kolom kanan ----------
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Flow Rate:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.flowRate}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('ml/min', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+                Text('Systolic Peak:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',color: Colors.white, ),),
+                Text('Time', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.systolicPeakTime}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('ms', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+                Text('Diastolic Peak:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',color: Colors.white, ),),
+                Text('Time', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.diastolicPeakTime}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('ms', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+                Text('Diastolic Base Pressure', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter',color: Colors.white, ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.basePressure}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', color: Colors.white,), ),
+                  const SizedBox(width: 10),
+                  Text('mmhg', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.white, ), ),
+                ],),
+                Text('Notch:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Text('Pressure', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.notchPressure}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('mmhg', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                  
+                ],),
+              ],
+            ),
           ),
-        ),
-      ],
-    );
+        ],
+      );
+    } else {
+      // OPEN LOOP - New parameters display
+      return Row(
+        children: [
+          // ---------- Kolom kiri ----------
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Systole Peak:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Text('% pump power', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.sysPWM}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('%', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+                const SizedBox(height: 10),
+                
+                Text('Systole High Period:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Text('% of systole Period', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.sysHighPercent}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('%', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+                const SizedBox(height: 10),
+                
+                Text('Systole / Diastole Period:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Text('% of pulse period', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.sysPeriod}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('%', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                  const SizedBox(width: 10),
+                  Text('/',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('${parameters.disPeriod}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('%', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                  const SizedBox(width: 10),
+                ],),
+              ],
+            ),
+          ),
+
+          // ---------- Kolom kanan ----------
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Diastole Peak:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Text('% pump power', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.disPWM}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('%', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+                const SizedBox(height: 10),
+                
+                Text('Diastole High Period:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Text('% of diastole period', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.disHighPercent}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('%', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+                const SizedBox(height: 10),
+                
+                Text('Heart Rate:', style: TextStyle(fontSize: FontSizes.medium(context),fontWeight: FontWeight.w600,fontFamily: 'Inter',),),
+                Text('BPM', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                Row(crossAxisAlignment: CrossAxisAlignment.center,children: [
+                  Text('${parameters.heartRate}',style: TextStyle(fontSize: FontSizes.big(context),fontWeight: FontWeight.w600, fontFamily: 'Inter', ), ),
+                  const SizedBox(width: 10),
+                  Text('BPM', style: TextStyle( fontSize: FontSizes.small(context), fontWeight: FontWeight.w500, fontFamily: 'Inter', color: Colors.grey[700], ), ),
+                ],),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
   }
 }

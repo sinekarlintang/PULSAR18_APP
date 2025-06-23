@@ -1,3 +1,4 @@
+// task_control.ino
 #include "tasks.h"
 
 extern PumpParameters pumpParams;
@@ -7,6 +8,7 @@ extern float setpointPressure;
 extern float generateBloodPressureWaveform();
 void controlPump();
 void pump_loop();
+void open_loop();
 void resetControlSystem();
 
 void TaskControl(void *pv) {
@@ -19,7 +21,7 @@ void TaskControl(void *pv) {
         systolicDuration = pumpParams.systolicPeriod / 100.0 * cycleTime;
         diastolicDuration = pumpParams.diastolicPeriod / 100.0 * cycleTime;
         sysPeak = pumpParams.systolicPeakTime / 1000.0;
-        pump_loop();
+        controlPump();
         lastSampleTime = now;
       }
     }
@@ -28,7 +30,7 @@ void TaskControl(void *pv) {
 }
 
 void pump_loop() {  
-    if (pumpParams.startPump != 1) {
+  if (pumpParams.startPump != 1) {
     // Stop pump immediately if not started
     ledcWrite(PUMP_PWM_PIN, 0);
     currentPWM = 0;
@@ -149,18 +151,106 @@ void pump_loop() {
   }
 }
 
-void controlPump() {
-  // pump_loop();  
-  if (pumpParams.startPump == 0) {
-    resetControlSystem();
-    setpointPressure = 0;
+void open_loop() {
+  if (pumpParams.startPump != 1) {
+    // Stop pump immediately if not started
     ledcWrite(PUMP_PWM_PIN, 0);
     currentPWM = 0;
-    integral_outer = 0;
-    integral_inner = 0;
-    cycleStartTime = millis();
+    return;
+  }
+
+  unsigned long currentTime = millis();
+  
+  // Hitung waktu dalam satu siklus heartbeat
+  float bpm = pumpParams.heartRate;
+  float cycleTime = 60.0 / bpm * 1000.0; // dalam milliseconds
+  
+  // Hitung waktu posisi dalam siklus saat ini
+  unsigned long cyclePosition = (currentTime - cycleStartTime) % (unsigned long)cycleTime;
+  float cyclePercent = (float)cyclePosition / cycleTime * 100.0; // 0-100%
+  
+  // Reset cycle jika diperlukan
+  if (cyclePosition == 0) {
+    cycleStartTime = currentTime;
+  }
+  
+  // Hitung durasi systole dan diastole berdasarkan parameter
+  float systoleDuration = pumpParams.sysPeriod; // persen dari cycle
+  float diastoleDuration = pumpParams.disPeriod; // persen dari cycle
+  
+  // Hitung PWM berdasarkan posisi dalam siklus
+  int targetPWM = 0;
+  
+  if (cyclePercent < systoleDuration) {
+    // FASE SYSTOLE
+    float systolePosition = cyclePercent / systoleDuration * 100.0; // 0-100% dalam systole
+    float sysHighDuration = pumpParams.sysHighPercent; // persen dari systole yang high
+    
+    if (systolePosition < sysHighDuration) {
+      // High phase dalam systole
+      targetPWM = map(pumpParams.sysPWM, 0, 100, 0, 255); // Convert percent to PWM value
+    } else {
+      // Low phase dalam systole - transisi ke base
+      // float transitionPercent = (systolePosition - sysHighDuration) / (100.0 - sysHighDuration);
+      // int sysPWMValue = map(pumpParams.sysPWM, 0, 100, 0, 255);
+      // int basePWMValue = map(pumpParams.disPWM, 0, 100, 0, 255); // Gunakan disPWM sebagai base
+      targetPWM = 0;
+    }
+    
+  } else if (cyclePercent < (systoleDuration + diastoleDuration)) {
+    // FASE DIASTOLE
+    float diastoleStart = systoleDuration;
+    float diastolePosition = (cyclePercent - diastoleStart) / diastoleDuration * 100.0; // 0-100% dalam diastole
+    float disHighDuration = pumpParams.disHighPercent; // persen dari diastole yang high
+    
+    if (diastolePosition < disHighDuration) {
+      // High phase dalam diastole
+      targetPWM = map(pumpParams.disPWM, 0, 100, 0, 255); // Convert percent to PWM value
+    } else {
+      // Low phase dalam diastole - transisi ke minimum
+      // float transitionPercent = (diastolePosition - disHighDuration) / (100.0 - disHighDuration);
+      // int disPWMValue = map(pumpParams.disPWM, 0, 100, 0, 255);
+      // int minPWMValue = 10; // PWM minimum untuk menjaga pompa tidak mati total
+      targetPWM = 0;
+    }
+    
   } else {
+    // FASE REST - sisa waktu dalam cycle
+    targetPWM = 10; // PWM minimum
+  }
+  
+  // // Smooth transition ke target PWM untuk menghindari perubahan mendadak
+  // int pwmDifference = targetPWM - currentPWM;
+  // int maxChange = 5; // Maximum PWM change per sample untuk smooth transition
+  
+  // if (abs(pwmDifference) <= maxChange) {
+  //   currentPWM = targetPWM;
+  // } else {
+  //   currentPWM += (pwmDifference > 0) ? maxChange : -maxChange;
+  // }
+  
+  // Pastikan PWM dalam range yang valid
+  currentPWM = constrain(targetPWM, 0, 255);
+  
+  // Apply PWM to pump
+  ledcWrite(PUMP_PWM_PIN, currentPWM);
+  
+  // Optional: Output untuk monitoring (sesuaikan dengan kebutuhan)
+  // Format: setpoint, actual, targetPWM, currentPWM
+
+  pumpParams.pressureActual = readPressureFromADS();
+    Serial.print(pumpParams.pressureActual);
+    Serial.print(',');
+  Serial.print(targetPWM);
+  Serial.println();
+}
+
+void controlPump() {
+  // pump_loop();  
+  if (pumpParams.closeloop == 1) {
     pump_loop();
+  } else {
+    open_loop();
   }
 
 }

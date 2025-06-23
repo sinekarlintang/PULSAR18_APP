@@ -81,6 +81,7 @@ flutter:
     - assets/image/logo_stei.png
     - assets/image/border.png
     - assets/image/pressureGraph.png
+    - assets/image/pumpPowerGraph.png
     - assets/image/PULSAR18.png
 
   # An image asset can refer to one or more resolution-specific "variants", see

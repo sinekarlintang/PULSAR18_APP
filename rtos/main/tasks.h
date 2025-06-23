@@ -35,7 +35,13 @@ const float SENSOR_VMAX = 4.05;
 
 // --- Pump Parameters Structure ---
 struct PumpParameters {
-  int heartRate = 60;
+  int heartRate = 60;               // akan dipake di closeloop dan openloop
+  int flowRate = 80;
+  int pressureActual = 80;
+  int closeloop = 1;               // close loop mode or open loop mode
+  int startPump = 0;
+  String pumpMode = "Otomatis";
+
   int systolicPressure = 120;
   int diastolicPressure = 110;
   int systolicPeriod = 50;
@@ -43,11 +49,15 @@ struct PumpParameters {
   int notchPressure = 108;
   int systolicPeakTime = 300;
   int diastolicPeakTime = 300;
-  int flowRate = 80;
-  int pressureActual = 80;
-  String pumpMode = "Otomatis";
-  int startPump = 0;
   int basePressure = 80;
+
+  int sysPWM = 100;    // percent pump pwm saat hight
+  int disPWM = 50;     // percent pump pwm saat high
+  int sysPeriod = 50;       // percent systole dari heart pulse
+  int disPeriod = 50;
+  int sysHighPercent = 20;  // persen high dari sysPeriod
+  int disHighPercent = 20;
+
 };
 
 // Structure for SD card command

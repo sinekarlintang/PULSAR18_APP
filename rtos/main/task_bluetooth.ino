@@ -1,3 +1,5 @@
+// task_bluetooth.inodmode
+// #include "tasks.h"
 extern String receivedData;
 extern BluetoothSerial SerialBT;
 extern PumpParameters pumpParams;
@@ -15,7 +17,7 @@ void sendDesiredParameters();
 void sendActualParameters();
 void sendAvailableModes();
 void sendModeConfirmation(String mode);
-void sendModeAddedConfirmation(String modeName);
+void sendModeAddedConfirmation(String modeName, int modeType);
 void sendModeDeletedConfirmation(String modeName);
 void sendParametersConfirmation();
 void sendStartStopConfirmation(int startPump);
@@ -131,9 +133,10 @@ void handleSetParameters(DynamicJsonDocument &doc) {
       parametersChanged = true;
     }
   }
+  
   if (doc.containsKey("basePressure")) {
     int newValue = doc["basePressure"];
-    if (newValue >= 30 && newValue <= 150) { // Valid base
+    if (newValue >= 30 && newValue <= 150) { // Valid base pressure range
       pumpParams.basePressure = newValue;
       parametersChanged = true;
     }
@@ -175,6 +178,63 @@ void handleSetParameters(DynamicJsonDocument &doc) {
     int newValue = doc["diastolicPeakTime"];
     if (newValue >= 0 && newValue <= 5000) { // Valid time range in ms
       pumpParams.diastolicPeakTime = newValue;
+      parametersChanged = true;
+    }
+  }
+  
+  // === PARAMETER BARU UNTUK OPEN LOOP ===
+  if (doc.containsKey("closeloop")) {
+    int newValue = doc["closeloop"];
+    if (newValue == 0 || newValue == 1) { // Valid close loop flag
+      pumpParams.closeloop = newValue;
+      parametersChanged = true;
+    }
+  }
+  
+  if (doc.containsKey("sysPWM")) {
+    int newValue = doc["sysPWM"];
+    if (newValue >= 0 && newValue <= 100) { // Valid PWM percentage range
+      pumpParams.sysPWM = newValue;
+      parametersChanged = true;
+    }
+  }
+  
+  if (doc.containsKey("disPWM")) {
+    int newValue = doc["disPWM"];
+    if (newValue >= 0 && newValue <= 100) { // Valid PWM percentage range
+      pumpParams.disPWM = newValue;
+      parametersChanged = true;
+    }
+  }
+  
+  if (doc.containsKey("sysPeriod")) {
+    int newValue = doc["sysPeriod"];
+    if (newValue >= 10 && newValue <= 90) { // Valid percentage range
+      pumpParams.sysPeriod = newValue;
+      parametersChanged = true;
+    }
+  }
+  
+  if (doc.containsKey("disPeriod")) {
+    int newValue = doc["disPeriod"];
+    if (newValue >= 10 && newValue <= 90) { // Valid percentage range
+      pumpParams.disPeriod = newValue;
+      parametersChanged = true;
+    }
+  }
+  
+  if (doc.containsKey("sysHighPercent")) {
+    int newValue = doc["sysHighPercent"];
+    if (newValue >= 0 && newValue <= 100) { // Valid percentage range
+      pumpParams.sysHighPercent = newValue;
+      parametersChanged = true;
+    }
+  }
+  
+  if (doc.containsKey("disHighPercent")) {
+    int newValue = doc["disHighPercent"];
+    if (newValue >= 0 && newValue <= 100) { // Valid percentage range
+      pumpParams.disHighPercent = newValue;
       parametersChanged = true;
     }
   }
@@ -228,18 +288,30 @@ void handleSetStartStop(DynamicJsonDocument &doc) {
 void handleGetAvailableModes() {
   sendAvailableModes();
 }
-
 void handleAddMode(DynamicJsonDocument &doc) {
+  // Validate required parameters
   if (!doc.containsKey("modeName")) {
     sendErrorResponse("Missing modeName parameter");
     return;
   }
   
+  if (!doc.containsKey("closeloop")) {
+    sendErrorResponse("Missing closeloop parameter");
+    return;
+  }
+  
   String modeName = doc["modeName"];
+  int closeloop = doc["closeloop"];
   
   // Validate mode name
   if (modeName.length() == 0 || modeName.length() > 50) {
     sendErrorResponse("Invalid mode name length (1-50 characters)");
+    return;
+  }
+  
+  // Validate closeloop parameter (assuming it should be 0 or 1)
+  if (closeloop != 0 && closeloop != 1) {
+    sendErrorResponse("Invalid closeloop parameter (must be 0 or 1)");
     return;
   }
   
@@ -249,22 +321,23 @@ void handleAddMode(DynamicJsonDocument &doc) {
     return;
   }
   
-  // Create a copy of current parameters with new mode name
+  // Create a copy of current parameters with new mode name and closeloop setting
   PumpParameters newMode = pumpParams;
   newMode.pumpMode = modeName;
+  newMode.closeloop = closeloop;  // Set the closeloop parameter
   
   // Add mode to SD card
   if (addModeToSD(newMode)) {
     // Add to available modes list
     availableModes.push_back(modeName);
     
-    // Send confirmation
-    sendModeAddedConfirmation(modeName);
+    // Send confirmation with closeloop info
+    sendModeAddedConfirmation(modeName, closeloop);
     
     // Send updated available modes list
     sendAvailableModes();
     
-    Serial.println("Mode added successfully: " + modeName);
+    Serial.println("Mode added successfully: " + modeName + " (closeloop: " + String(closeloop) + ")");
   } else {
     sendErrorResponse("Failed to add mode to storage");
   }
@@ -345,6 +418,16 @@ void sendDesiredParameters() {
   doc["mode"] = pumpParams.pumpMode;
   doc["startPump"] = pumpParams.startPump;
   doc["basePressure"] = pumpParams.basePressure;
+  
+  // === PARAMETER BARU UNTUK OPEN LOOP ===
+  doc["closeloop"] = pumpParams.closeloop;
+  doc["sysPWM"] = pumpParams.sysPWM;
+  doc["disPWM"] = pumpParams.disPWM;
+  doc["sysPeriod"] = pumpParams.sysPeriod;
+  doc["disPeriod"] = pumpParams.disPeriod;
+  doc["sysHighPercent"] = pumpParams.sysHighPercent;
+  doc["disHighPercent"] = pumpParams.disHighPercent;
+  
   doc["timestamp"] = millis();
   
   String jsonString;
@@ -354,7 +437,6 @@ void sendDesiredParameters() {
 
 void sendActualParameters() {
   DynamicJsonDocument doc(512);
-  // Serial.println("Sent: " + pumpParams.pressureActual);
   doc["type"] = "ACTUAL_PARAMETERS";
   doc["flowRate"] = pumpParams.flowRate;
   doc["pressureActual"] = pumpParams.pressureActual;
@@ -385,10 +467,11 @@ void sendAvailableModes() {
   Serial.println("Available modes sent");
 }
 
-void sendModeAddedConfirmation(String modeName) {
+void sendModeAddedConfirmation(String modeName, int modeType) {
   DynamicJsonDocument doc(512);
   doc["type"] = "MODE_ADDED";
   doc["modeName"] = modeName;
+  doc["closeloop"] = modeType;
   doc["message"] = "Mode '" + modeName + "' added successfully";
   doc["timestamp"] = millis();
   
